@@ -384,21 +384,12 @@ print("==============================")
 print(f"Total suburb-days: {len(df_model)}")
 print(f"Number of suburbs: {df_model['suburb'].nunique()}")
 print(f"Date range: {df_model['date'].min().date()} to {df_model['date'].max().date()}")
-print(
-    "\nPlain English: Each row represents one suburb on one day. "
-    "The model uses these suburb-day records to learn which conditions "
-    "are linked with poor overnight cooling."
-)
 
 print("\nHot day threshold:")
 print(hot_threshold)
 
 print("\nHot day counts:")
 print(df_model["hot_day"].value_counts())
-print(
-    "\nPlain English: This counts how many suburb-days reached at least 30°C. "
-    "This is kept for context only. It is not the main target the model is predicting."
-)
 
 
 # =========================
@@ -423,11 +414,6 @@ print(cooling_failure_threshold)
 
 print("\nTarget class counts:")
 print(df_model["cooling_failure"].value_counts())
-print(
-    "\nPlain English: A cooling failure means the suburb cooled down very slowly overnight. "
-    "In this model, the slowest-cooling 25% of nights are labelled as cooling failures. "
-    "The threshold above is the cooling rate cut-off in °C per hour."
-)
 
 
 # =========================
@@ -458,11 +444,6 @@ df_model["cooling_risk_category"] = df_model.apply(assign_risk_category, axis=1)
 
 print("\nCooling risk category counts:")
 print(df_model["cooling_risk_category"].value_counts())
-print(
-    "\nPlain English: These categories split nights into cooling-risk levels. "
-    "Extreme and High risk are the nights where the suburb cooled the slowest. "
-    "Low risk means the suburb cooled relatively well overnight."
-)
 
 # Full suburb-by-risk table is saved to CSV, but not printed to keep terminal output clean.
 risk_counts = pd.crosstab(df_model["suburb"], df_model["cooling_risk_category"])
@@ -522,11 +503,6 @@ features = [
 
 print("\nFeatures used for modelling:")
 print(features)
-print(
-    "\nPlain English: These are the inputs given to the machine learning model. "
-    "They include daily weather, coastal/water distance, tree canopy, population density, "
-    "built-up area, and season. The model uses these to predict whether overnight cooling will be poor."
-)
 
 
 # =========================
@@ -639,11 +615,6 @@ print("\n==============================")
 print("LOGISTIC REGRESSION RESULTS")
 print("==============================")
 print(classification_report(y_test, log_pred, zero_division=0))
-print(
-    "Plain English: Logistic Regression is the simple baseline model. "
-    "It is used as a comparison point. If Random Forest performs better than this, "
-    "it suggests the more flexible model is learning useful patterns."
-)
 
 
 # =========================
@@ -714,11 +685,6 @@ print("\n==============================")
 print("RANDOM FOREST 5-FOLD CROSS-VALIDATION RESULTS")
 print("==============================")
 print(cv_output)
-print(
-    "\nPlain English: Cross-validation tests the Random Forest several times on different "
-    "splits of the training data. This checks whether the model is consistently good, "
-    "rather than just lucky on one train/test split. The mean row is the main one to report."
-)
 
 print("\nSaved cross-validation scores:")
 print(CROSS_VALIDATION_FILE)
@@ -733,12 +699,6 @@ print("\n==============================")
 print("RANDOM FOREST RESULTS")
 print("==============================")
 print(classification_report(y_test, rf_pred, zero_division=0))
-print(
-    "Plain English: Random Forest is the main model. For cooling failure, recall tells us "
-    "how many slow-cooling nights the model successfully caught. Precision tells us how often "
-    "a cooling-failure warning was actually correct. For this project, recall is especially important "
-    "because missing a risky slow-cooling night is worse than giving some false alarms."
-)
 
 
 # =========================
@@ -761,17 +721,6 @@ plt.close()
 print("\nSaved confusion matrix:")
 print(CONFUSION_MATRIX_FIG)
 
-tn, fp, fn, tp = cm.ravel()
-print("\nConfusion matrix explained:")
-print(f"- Correctly predicted normal-cooling nights: {tn}")
-print(f"- False alarms, predicted cooling failure but it was not: {fp}")
-print(f"- Missed cooling-failure nights: {fn}")
-print(f"- Correctly detected cooling-failure nights: {tp}")
-print(
-    "Plain English: This shows the model's real mistakes. "
-    "For a health-risk warning model, the missed cooling-failure nights are the most concerning number."
-)
-
 
 # =========================
 # 19. FEATURE IMPORTANCE
@@ -788,11 +737,6 @@ importance = importance.sort_values(by="importance", ascending=False)
 
 print("\nFeature importance:")
 print(importance)
-print(
-    "\nPlain English: Feature importance shows which inputs the Random Forest relied on most. "
-    "Higher values mean the feature was more useful for predicting poor overnight cooling. "
-    "This does not prove direct causation, but it helps explain what patterns the model found."
-)
 
 importance.to_csv(FEATURE_IMPORTANCE_FILE, index=False)
 
@@ -938,24 +882,3 @@ print(
 
 print("\nFeatures used:")
 print(features)
-
-print("\n==============================")
-print("PLAIN-ENGLISH INTERPRETATION")
-print("==============================")
-print(
-    "This model predicts whether a suburb is likely to cool down poorly overnight. "
-    "Poor overnight cooling matters because high night-time temperatures can increase health risk, "
-    "especially when people cannot recover from daytime heat."
-)
-print(
-    "The target is not simply whether the day was hot. Instead, the model looks for nights where "
-    "the temperature dropped very slowly from 6pm to the overnight minimum."
-)
-print(
-    "The Random Forest result should be interpreted using recall, precision, F1-score, "
-    "the confusion matrix, and feature importance. Accuracy alone is not enough."
-)
-print(
-    "The feature importance results help explain which conditions were most linked with poor overnight cooling, "
-    "such as daily temperature range, distance to water, rainfall, coastal distance, wind, and humidity."
-)
