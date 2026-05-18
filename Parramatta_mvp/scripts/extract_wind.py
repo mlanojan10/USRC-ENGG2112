@@ -1,14 +1,40 @@
-import xarray as xr
+from pathlib import Path
+
 import pandas as pd
+import xarray as xr
 
 
 # =========================
-# 1. LOAD WIND NETCDF
+# 0. PROJECT PATHS
 # =========================
 
-nc_file = "parramatta_wind_2020_2039_raw.nc"
+BASE_DIR = Path(__file__).resolve().parents[1]
 
-ds = xr.open_dataset(nc_file)
+RAW_DIR = BASE_DIR / "data_raw"
+PROCESSED_DIR = BASE_DIR / "data_processed"
+
+PROCESSED_DIR.mkdir(exist_ok=True)
+
+INPUT_FILE = RAW_DIR / "parramatta_wind_2020_2039_raw.nc"
+OUTPUT_FILE = PROCESSED_DIR / "parramatta_wind_2020.csv"
+
+
+# =========================
+# 1. CHECK INPUT FILE
+# =========================
+
+if not INPUT_FILE.exists():
+    raise FileNotFoundError(
+        f"Missing file: {INPUT_FILE}\n"
+        "Place parramatta_wind_2020_2039_raw.nc inside data_raw/"
+    )
+
+
+# =========================
+# 2. LOAD NETCDF
+# =========================
+
+ds = xr.open_dataset(INPUT_FILE)
 
 print("NetCDF dataset:")
 print(ds)
@@ -21,13 +47,8 @@ print(list(ds.coords))
 
 
 # =========================
-# 2. IDENTIFY VARIABLE NAMES
+# 3. DETECT VARIABLE AND COORDINATES
 # =========================
-
-# Common wind variable names:
-# sfcWind = near-surface wind speed
-# uas = eastward wind
-# vas = northward wind
 
 wind_var = list(ds.data_vars)[0]
 
@@ -57,18 +78,18 @@ print("Using time coordinate:", time_name)
 
 
 # =========================
-# 3. CHECK FILE IS NOT EMPTY
+# 4. CHECK FILE IS NOT EMPTY
 # =========================
 
 if ds.sizes.get(lat_name, 0) == 0 or ds.sizes.get(lon_name, 0) == 0:
     raise ValueError(
-        "Downloaded NetCDF has zero lat/lon grid cells. "
-        "Redownload using the larger Parramatta bounding box."
+        "Downloaded wind NetCDF has zero lat/lon grid cells. "
+        "Redownload using a larger Parramatta bounding box."
     )
 
 
 # =========================
-# 4. EXTRACT NEAREST PARRAMATTA GRID CELL
+# 5. EXTRACT NEAREST PARRAMATTA GRID CELL
 # =========================
 
 parramatta_lat = -33.82
@@ -77,9 +98,9 @@ parramatta_lon = 151.00
 wind_point = ds[wind_var].sel(
     {
         lat_name: parramatta_lat,
-        lon_name: parramatta_lon
+        lon_name: parramatta_lon,
     },
-    method="nearest"
+    method="nearest",
 )
 
 print("\nSelected nearest grid cell:")
@@ -87,7 +108,7 @@ print(wind_point)
 
 
 # =========================
-# 5. CONVERT TO DATAFRAME
+# 6. CONVERT TO DATAFRAME
 # =========================
 
 wind_df = wind_point.to_dataframe().reset_index()
@@ -98,34 +119,39 @@ print(wind_df.columns)
 
 
 # =========================
-# 6. CLEAN COLUMN NAMES
+# 7. CLEAN DATAFRAME
 # =========================
 
-wind_df = wind_df.rename(columns={
-    time_name: "date",
-    wind_var: "wind_speed_mean"
-})
+wind_df = wind_df.rename(
+    columns={
+        time_name: "date",
+        wind_var: "wind_speed_mean",
+    }
+)
 
 wind_df = wind_df[["date", "wind_speed_mean"]].copy()
 
 wind_df["date"] = pd.to_datetime(wind_df["date"], errors="coerce")
-wind_df["wind_speed_mean"] = pd.to_numeric(wind_df["wind_speed_mean"], errors="coerce")
+wind_df["wind_speed_mean"] = pd.to_numeric(
+    wind_df["wind_speed_mean"],
+    errors="coerce",
+)
 
 wind_df = wind_df.dropna(subset=["date", "wind_speed_mean"])
 
 
 # =========================
-# 7. FILTER ONLY 2020
+# 8. FILTER ONLY 2020
 # =========================
 
 wind_df = wind_df[
-    (wind_df["date"] >= "2020-01-01") &
-    (wind_df["date"] < "2021-01-01")
+    (wind_df["date"] >= "2020-01-01")
+    & (wind_df["date"] < "2021-01-01")
 ].copy()
 
 
 # =========================
-# 8. CONVERT TO DAILY MEAN
+# 9. CONVERT TO DAILY MEAN
 # =========================
 
 wind_df = (
@@ -139,13 +165,13 @@ wind_df["date"] = pd.to_datetime(wind_df["date"])
 
 
 # =========================
-# 9. SAVE CLEAN CSV
+# 10. SAVE CLEAN CSV
 # =========================
 
-wind_df.to_csv("parramatta_wind_2020.csv", index=False)
+wind_df.to_csv(OUTPUT_FILE, index=False)
 
 print("\nSaved clean wind file:")
-print("parramatta_wind_2020.csv")
+print(OUTPUT_FILE)
 
 print("\nFirst 5 rows:")
 print(wind_df.head())

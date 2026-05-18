@@ -1,23 +1,37 @@
-import os
-import xarray as xr
+from pathlib import Path
+
 import pandas as pd
+import xarray as xr
 
 
 # =========================
-# 0. FILE PATHS
+# 0. PROJECT PATHS
 # =========================
 
-RAW_DIR = "data_raw"
-PROCESSED_DIR = "data_processed"
+BASE_DIR = Path(__file__).resolve().parents[1]
 
-os.makedirs(PROCESSED_DIR, exist_ok=True)
+RAW_DIR = BASE_DIR / "data_raw"
+PROCESSED_DIR = BASE_DIR / "data_processed"
 
-INPUT_FILE = os.path.join(RAW_DIR, "parramatta_humidity_2020_2039_raw.nc")
-OUTPUT_FILE = os.path.join(PROCESSED_DIR, "parramatta_humidity_2020.csv")
+PROCESSED_DIR.mkdir(exist_ok=True)
+
+INPUT_FILE = RAW_DIR / "parramatta_humidity_2020_2039_raw.nc"
+OUTPUT_FILE = PROCESSED_DIR / "parramatta_humidity_2020.csv"
 
 
 # =========================
-# 1. LOAD HUMIDITY NETCDF
+# 1. CHECK INPUT FILE
+# =========================
+
+if not INPUT_FILE.exists():
+    raise FileNotFoundError(
+        f"Missing file: {INPUT_FILE}\n"
+        "Place parramatta_humidity_2020_2039_raw.nc inside data_raw/"
+    )
+
+
+# =========================
+# 2. LOAD NETCDF
 # =========================
 
 ds = xr.open_dataset(INPUT_FILE)
@@ -33,7 +47,7 @@ print(list(ds.coords))
 
 
 # =========================
-# 2. IDENTIFY VARIABLE NAMES
+# 3. DETECT VARIABLE AND COORDINATES
 # =========================
 
 humidity_var = list(ds.data_vars)[0]
@@ -64,7 +78,7 @@ print("Using time coordinate:", time_name)
 
 
 # =========================
-# 3. CHECK FILE IS NOT EMPTY
+# 4. CHECK FILE IS NOT EMPTY
 # =========================
 
 if ds.sizes.get(lat_name, 0) == 0 or ds.sizes.get(lon_name, 0) == 0:
@@ -75,7 +89,7 @@ if ds.sizes.get(lat_name, 0) == 0 or ds.sizes.get(lon_name, 0) == 0:
 
 
 # =========================
-# 4. EXTRACT NEAREST PARRAMATTA GRID CELL
+# 5. EXTRACT NEAREST PARRAMATTA GRID CELL
 # =========================
 
 parramatta_lat = -33.82
@@ -86,7 +100,7 @@ humidity_point = ds[humidity_var].sel(
         lat_name: parramatta_lat,
         lon_name: parramatta_lon,
     },
-    method="nearest"
+    method="nearest",
 )
 
 print("\nSelected nearest grid cell:")
@@ -94,7 +108,7 @@ print(humidity_point)
 
 
 # =========================
-# 5. CONVERT TO DATAFRAME
+# 6. CONVERT TO DATAFRAME
 # =========================
 
 humidity_df = humidity_point.to_dataframe().reset_index()
@@ -105,37 +119,39 @@ print(humidity_df.columns)
 
 
 # =========================
-# 6. CLEAN COLUMN NAMES
+# 7. CLEAN DATAFRAME
 # =========================
 
-humidity_df = humidity_df.rename(columns={
-    time_name: "date",
-    humidity_var: "humidity_mean",
-})
+humidity_df = humidity_df.rename(
+    columns={
+        time_name: "date",
+        humidity_var: "humidity_mean",
+    }
+)
 
 humidity_df = humidity_df[["date", "humidity_mean"]].copy()
 
 humidity_df["date"] = pd.to_datetime(humidity_df["date"], errors="coerce")
 humidity_df["humidity_mean"] = pd.to_numeric(
     humidity_df["humidity_mean"],
-    errors="coerce"
+    errors="coerce",
 )
 
 humidity_df = humidity_df.dropna(subset=["date", "humidity_mean"])
 
 
 # =========================
-# 7. FILTER ONLY 2020
+# 8. FILTER ONLY 2020
 # =========================
 
 humidity_df = humidity_df[
-    (humidity_df["date"] >= "2020-01-01") &
-    (humidity_df["date"] < "2021-01-01")
+    (humidity_df["date"] >= "2020-01-01")
+    & (humidity_df["date"] < "2021-01-01")
 ].copy()
 
 
 # =========================
-# 8. CONVERT TO DAILY MEAN
+# 9. CONVERT TO DAILY MEAN
 # =========================
 
 humidity_df = (
@@ -149,7 +165,7 @@ humidity_df["date"] = pd.to_datetime(humidity_df["date"])
 
 
 # =========================
-# 9. SAVE CLEAN CSV
+# 10. SAVE CLEAN CSV
 # =========================
 
 humidity_df.to_csv(OUTPUT_FILE, index=False)

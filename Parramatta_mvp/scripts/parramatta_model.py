@@ -1,4 +1,5 @@
-import os
+from pathlib import Path
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -9,36 +10,50 @@ from sklearn.ensemble import RandomForestClassifier
 
 
 # =========================
-# 0. FILE PATHS
+# 0. PROJECT PATHS
 # =========================
 
-RAW_DIR = "data_raw"
-PROCESSED_DIR = "data_processed"
-FIGURES_DIR = "outputs/figures"
-TABLES_DIR = "outputs/tables"
+BASE_DIR = Path(__file__).resolve().parents[1]
 
-os.makedirs(PROCESSED_DIR, exist_ok=True)
-os.makedirs(FIGURES_DIR, exist_ok=True)
-os.makedirs(TABLES_DIR, exist_ok=True)
+RAW_DIR = BASE_DIR / "data_raw"
+PROCESSED_DIR = BASE_DIR / "data_processed"
+FIGURES_DIR = BASE_DIR / "outputs" / "figures"
+TABLES_DIR = BASE_DIR / "outputs" / "tables"
 
-WEATHER_FILE = os.path.join(RAW_DIR, "parramatta_weather_2020.csv")
-HUMIDITY_FILE = os.path.join(PROCESSED_DIR, "parramatta_humidity_2020.csv")
-WIND_FILE = os.path.join(PROCESSED_DIR, "parramatta_wind_2020.csv")
+PROCESSED_DIR.mkdir(exist_ok=True)
+FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+TABLES_DIR.mkdir(parents=True, exist_ok=True)
 
-FEATURE_TABLE_FILE = os.path.join(
-    PROCESSED_DIR,
-    "parramatta_feature_table_with_humidity_wind.csv"
-)
+WEATHER_FILE = RAW_DIR / "parramatta_weather_2020.csv"
+HUMIDITY_FILE = PROCESSED_DIR / "parramatta_humidity_2020.csv"
+WIND_FILE = PROCESSED_DIR / "parramatta_wind_2020.csv"
 
-FEATURE_IMPORTANCE_FILE = os.path.join(TABLES_DIR, "feature_importance.csv")
-MODEL_PREDICTIONS_FILE = os.path.join(TABLES_DIR, "model_predictions.csv")
+FEATURE_TABLE_FILE = PROCESSED_DIR / "parramatta_feature_table_with_humidity_wind.csv"
 
-CONFUSION_MATRIX_FIG = os.path.join(FIGURES_DIR, "confusion_matrix.png")
-FEATURE_IMPORTANCE_FIG = os.path.join(FIGURES_DIR, "feature_importance.png")
+FEATURE_IMPORTANCE_FILE = TABLES_DIR / "feature_importance.csv"
+MODEL_PREDICTIONS_FILE = TABLES_DIR / "model_predictions.csv"
+
+CONFUSION_MATRIX_FIG = FIGURES_DIR / "confusion_matrix.png"
+FEATURE_IMPORTANCE_FIG = FIGURES_DIR / "feature_importance.png"
 
 
 # =========================
-# 1. LOAD DAILY WEATHER DATA
+# 1. CHECK INPUT FILES
+# =========================
+
+required_files = [
+    WEATHER_FILE,
+    HUMIDITY_FILE,
+    WIND_FILE,
+]
+
+for file in required_files:
+    if not file.exists():
+        raise FileNotFoundError(f"Missing required file: {file}")
+
+
+# =========================
+# 2. LOAD DAILY WEATHER DATA
 # =========================
 
 df = pd.read_csv(WEATHER_FILE)
@@ -51,7 +66,7 @@ print(df.head())
 
 
 # =========================
-# 2. BASIC WEATHER CLEANING
+# 3. BASIC WEATHER CLEANING
 # =========================
 
 df = df[["date", "tmin", "tmax", "prcp"]].copy()
@@ -68,7 +83,7 @@ df["suburb"] = "Parramatta"
 
 
 # =========================
-# 3. LOAD HUMIDITY DATA
+# 4. LOAD HUMIDITY DATA
 # =========================
 
 humidity = pd.read_csv(HUMIDITY_FILE)
@@ -82,20 +97,20 @@ print(humidity.head())
 humidity["date"] = pd.to_datetime(humidity["date"], errors="coerce")
 humidity["humidity_mean"] = pd.to_numeric(
     humidity["humidity_mean"],
-    errors="coerce"
+    errors="coerce",
 )
 
 humidity = humidity.dropna(subset=["date", "humidity_mean"])
 
 
 # =========================
-# 4. MERGE HUMIDITY DATA
+# 5. MERGE HUMIDITY DATA
 # =========================
 
 df = df.merge(
     humidity[["date", "humidity_mean"]],
     on="date",
-    how="left"
+    how="left",
 )
 
 df["humidity_mean"] = df["humidity_mean"].fillna(
@@ -110,7 +125,7 @@ print(df["humidity_mean"].isna().sum())
 
 
 # =========================
-# 5. LOAD WIND SPEED DATA
+# 6. LOAD WIND SPEED DATA
 # =========================
 
 wind = pd.read_csv(WIND_FILE)
@@ -124,20 +139,20 @@ print(wind.head())
 wind["date"] = pd.to_datetime(wind["date"], errors="coerce")
 wind["wind_speed_mean"] = pd.to_numeric(
     wind["wind_speed_mean"],
-    errors="coerce"
+    errors="coerce",
 )
 
 wind = wind.dropna(subset=["date", "wind_speed_mean"])
 
 
 # =========================
-# 6. MERGE WIND SPEED DATA
+# 7. MERGE WIND SPEED DATA
 # =========================
 
 df = df.merge(
     wind[["date", "wind_speed_mean"]],
     on="date",
-    how="left"
+    how="left",
 )
 
 df["wind_speed_mean"] = df["wind_speed_mean"].fillna(
@@ -152,7 +167,7 @@ print(df["wind_speed_mean"].isna().sum())
 
 
 # =========================
-# 7. FEATURE ENGINEERING
+# 8. FEATURE ENGINEERING
 # =========================
 
 df["daily_temp_range"] = df["tmax"] - df["tmin"]
@@ -173,7 +188,7 @@ print(df["hot_day"].value_counts())
 
 
 # =========================
-# 8. CREATE TARGET VARIABLE
+# 9. CREATE TARGET VARIABLE
 # =========================
 
 hot_days = df[df["hot_day"] == 1].copy()
@@ -188,8 +203,8 @@ if len(hot_days) < 10:
 high_tmin_threshold = hot_days["tmin"].quantile(0.60)
 
 df["poor_cooling_proxy"] = (
-    (df["hot_day"] == 1) &
-    (df["tmin"] >= high_tmin_threshold)
+    (df["hot_day"] == 1)
+    & (df["tmin"] >= high_tmin_threshold)
 ).astype(int)
 
 print("\nHigh minimum temperature threshold among hot days:")
@@ -200,7 +215,7 @@ print(df["poor_cooling_proxy"].value_counts())
 
 
 # =========================
-# 9. SAVE CLEAN FEATURE TABLE
+# 10. SAVE CLEAN FEATURE TABLE
 # =========================
 
 feature_table = df[
@@ -227,7 +242,7 @@ print(FEATURE_TABLE_FILE)
 
 
 # =========================
-# 10. PREPARE ML DATA
+# 11. PREPARE ML DATA
 # =========================
 
 # Exclude tmin and hot_day to reduce label leakage.
@@ -251,22 +266,27 @@ y = df["poor_cooling_proxy"]
 if y.nunique() < 2:
     raise ValueError("Target has only one class. Model cannot train. Adjust threshold.")
 
+
+# =========================
+# 12. TRAIN / TEST SPLIT
+# =========================
+
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
     test_size=0.30,
     random_state=42,
-    stratify=y
+    stratify=y,
 )
 
 
 # =========================
-# 11. BASELINE MODEL: LOGISTIC REGRESSION
+# 13. BASELINE MODEL: LOGISTIC REGRESSION
 # =========================
 
 log_model = LogisticRegression(
     max_iter=1000,
-    class_weight="balanced"
+    class_weight="balanced",
 )
 
 log_model.fit(X_train, y_train)
@@ -280,7 +300,7 @@ print(classification_report(y_test, log_pred, zero_division=0))
 
 
 # =========================
-# 12. MAIN MODEL: RANDOM FOREST
+# 14. MAIN MODEL: RANDOM FOREST
 # =========================
 
 rf_model = RandomForestClassifier(
@@ -288,7 +308,7 @@ rf_model = RandomForestClassifier(
     random_state=42,
     class_weight="balanced",
     max_depth=4,
-    min_samples_leaf=3
+    min_samples_leaf=3,
 )
 
 rf_model.fit(X_train, y_train)
@@ -302,14 +322,14 @@ print(classification_report(y_test, rf_pred, zero_division=0))
 
 
 # =========================
-# 13. CONFUSION MATRIX
+# 15. CONFUSION MATRIX
 # =========================
 
 cm = confusion_matrix(y_test, rf_pred)
 
 disp = ConfusionMatrixDisplay(
     confusion_matrix=cm,
-    display_labels=["No poor cooling", "Poor cooling"]
+    display_labels=["No poor cooling", "Poor cooling"],
 )
 
 disp.plot()
@@ -323,13 +343,15 @@ print(CONFUSION_MATRIX_FIG)
 
 
 # =========================
-# 14. FEATURE IMPORTANCE
+# 16. FEATURE IMPORTANCE
 # =========================
 
-importance = pd.DataFrame({
-    "feature": features,
-    "importance": rf_model.feature_importances_
-})
+importance = pd.DataFrame(
+    {
+        "feature": features,
+        "importance": rf_model.feature_importances_,
+    }
+)
 
 importance = importance.sort_values(by="importance", ascending=False)
 
@@ -354,7 +376,7 @@ print(FEATURE_IMPORTANCE_FIG)
 
 
 # =========================
-# 15. SAVE MODEL OUTPUTS
+# 17. SAVE MODEL OUTPUTS
 # =========================
 
 results = X_test.copy()
@@ -369,7 +391,7 @@ print(MODEL_PREDICTIONS_FILE)
 
 
 # =========================
-# 16. FINAL SUMMARY
+# 18. FINAL SUMMARY
 # =========================
 
 print("\n==============================")
