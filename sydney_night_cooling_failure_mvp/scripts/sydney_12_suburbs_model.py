@@ -367,7 +367,14 @@ print(df_model[preview_cols].head())
 # 9. CREATE HOT DAY FLAG
 # =========================
 
-hot_threshold = df_model["tmax"].quantile(0.70)
+# Context variable only:
+# A hot day is defined as a suburb-day where daily maximum temperature
+# reaches at least 30°C.
+#
+# IMPORTANT:
+# This is NOT used to define the ML target anymore.
+# The target is now based directly on night-time cooling rate.
+hot_threshold = 30.0
 
 df_model["hot_day"] = (df_model["tmax"] >= hot_threshold).astype(int)
 
@@ -382,18 +389,17 @@ print(df_model["hot_day"].value_counts())
 # 10. CREATE TARGET VARIABLE
 # =========================
 
-hot_days = df_model[df_model["hot_day"] == 1].copy()
-
-if len(hot_days) < 10:
-    raise ValueError(
-        "Not enough hot-day samples. Use more weather data or lower the hot-day threshold."
-    )
-
-cooling_failure_threshold = hot_days["night_cooling_rate"].quantile(0.25)
+# Target definition:
+# Cooling failure = suburb-day where overnight cooling rate is in the
+# slowest-cooling 25% of all observed nights.
+#
+# This directly matches the project aim:
+# predicting poor night-time cooling because high night temperatures
+# can have health implications.
+cooling_failure_threshold = df_model["night_cooling_rate"].quantile(0.25)
 
 df_model["cooling_failure"] = (
-    (df_model["hot_day"] == 1)
-    & (df_model["night_cooling_rate"] <= cooling_failure_threshold)
+    df_model["night_cooling_rate"] <= cooling_failure_threshold
 ).astype(int)
 
 print("\nCooling failure threshold:")
@@ -407,15 +413,14 @@ print(df_model["cooling_failure"].value_counts())
 # 11. RISK CATEGORIES
 # =========================
 
-p10 = hot_days["night_cooling_rate"].quantile(0.10)
-p25 = hot_days["night_cooling_rate"].quantile(0.25)
-p50 = hot_days["night_cooling_rate"].quantile(0.50)
+# Risk categories are now based on the cooling-rate distribution across
+# all nights, not only hot days.
+p10 = df_model["night_cooling_rate"].quantile(0.10)
+p25 = df_model["night_cooling_rate"].quantile(0.25)
+p50 = df_model["night_cooling_rate"].quantile(0.50)
 
 
 def assign_risk_category(row):
-    if row["hot_day"] != 1:
-        return "Not hot day"
-
     rate = row["night_cooling_rate"]
 
     if rate <= p10:
@@ -841,8 +846,8 @@ print(f"- {FEATURE_IMPORTANCE_FIG}")
 
 print("\nTarget definition:")
 print(
-    "Cooling failure = hot day where overnight cooling rate is in the "
-    "bottom 25% of hot-day cooling rates across the 12-suburb dataset."
+    "Cooling failure = suburb-day where overnight cooling rate is in the "
+    "slowest-cooling 25% of all observed nights across the 12-suburb dataset."
 )
 
 print("\nNight-time cooling-rate formula:")

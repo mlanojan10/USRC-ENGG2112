@@ -1,13 +1,13 @@
-suburb,Extreme risk,High risk,Low risk,Moderate risk,Not hot day
-Bankstown,8,26,49,35,248
-Blacktown,3,18,88,37,220
-Bondi,27,8,2,11,318
-Campbelltown,2,19,94,27,224
-Coogee,27,8,2,11,318
-Cronulla,27,8,2,11,318
-Fairfield,3,18,88,37,220
-Liverpool,8,26,49,35,248
-Manly,21,18,11,17,299
-Parramatta,3,18,88,37,220
-Penrith,2,13,98,33,220
-Ryde,3,18,88,37,220
+suburb,Extreme risk,High risk,Low risk,Moderate risk
+Bankstown,17,36,215,98
+Blacktown,12,20,254,80
+Bondi,95,125,44,102
+Campbelltown,10,21,259,76
+Coogee,95,125,44,102
+Cronulla,95,125,44,102
+Fairfield,12,20,254,80
+Liverpool,17,36,215,98
+Manly,55,87,85,139
+Parramatta,12,20,254,80
+Penrith,10,21,271,64
+Ryde,12,20,254,80
