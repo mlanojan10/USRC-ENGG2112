@@ -1,4 +1,4 @@
-suburb,distance_to_coast_km,distance_to_water_km,is_coastal,inland_category,tree_canopy_percent,tree_canopy_area_m2,suburb_area_inside_gsr_m2,cadastred_suburb_area_m2
-Bondi,0.5,0.5,1,coastal,19.5728,170988,873744.5671999999,873599.0
-Parramatta,20.0,1.0,0,middle_inland,17.0356,933920,5481959.1784,5482170.0
-Campbelltown,40.0,10.0,0,far_inland,10.7411,1197240,11143979.7879,11146300.0
+suburb,distance_to_coast_km,distance_to_water_km,is_coastal,inland_category,tree_canopy_percent,tree_canopy_area_m2,suburb_area_inside_gsr_m2,cadastred_suburb_area_m2,sa2_name,population_2020,population_density_people_per_km2,area_km2,population_density_source_note
+Bondi,0.5,0.5,1,coastal,19.5728,170988,873744.5671999999,873599.0,Bondi Beach - North Bondi,23849,9692.7,2.5,"ABS Regional Population 2019-20, SA2 proxy"
+Parramatta,20.0,1.0,0,middle_inland,17.0356,933920,5481959.1784,5482170.0,Parramatta - Rosehill,34732,4087.8,8.5,"ABS Regional Population 2019-20, SA2 proxy"
+Campbelltown,40.0,10.0,0,far_inland,10.7411,1197240,11143979.7879,11146300.0,Campbelltown - Woodbine,21690,1577.7,13.7,"ABS Regional Population 2019-20, SA2 proxy"

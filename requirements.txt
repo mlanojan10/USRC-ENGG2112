@@ -1,0 +1,6 @@
+pandas
+matplotlib
+scikit-learn
+xarray
+netCDF4
+h5netcdf
