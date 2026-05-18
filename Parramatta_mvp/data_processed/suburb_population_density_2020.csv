@@ -1,4 +1,4 @@
-suburb,population_2020,population_density_people_per_km2,population_source_note
-Bondi,,,
-Parramatta,,,
-Campbelltown,,,
+suburb,sa2_name,population_2020,population_density_people_per_km2,area_km2,population_density_source_note
+Bondi,Bondi Beach - North Bondi,23849,9692.7,2.5,"ABS Regional Population 2019-20, SA2 proxy"
+Parramatta,Parramatta - Rosehill,34732,4087.8,8.5,"ABS Regional Population 2019-20, SA2 proxy"
+Campbelltown,Campbelltown - Woodbine,21690,1577.7,13.7,"ABS Regional Population 2019-20, SA2 proxy"

@@ -472,9 +472,7 @@ possible_features = [
     "distance_to_water_km",
     "is_coastal",
     "tree_canopy_percent",
-    "tree_canopy_area_m2",
-    "suburb_area_inside_gsr_m2",
-    "cadastred_suburb_area_m2",
+    "population_density_people_per_km2",
     "month",
     "is_summer",
 ]
@@ -534,6 +532,11 @@ optional_save_cols = [
     "tree_canopy_area_m2",
     "suburb_area_inside_gsr_m2",
     "cadastred_suburb_area_m2",
+    "sa2_name",
+    "population_2020",
+    "population_density_people_per_km2",
+    "area_km2",
+    "population_density_source_note",
     "month",
     "is_summer",
 ]
