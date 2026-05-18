@@ -23,108 +23,92 @@ PROCESSED_DIR.mkdir(exist_ok=True)
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 TABLES_DIR.mkdir(parents=True, exist_ok=True)
 
-# This file should be created by your Meteostat extraction script.
-# Expected columns:
-# datetime, suburb, station_id, station_name, temperature,
-# humidity, wind_speed, air_pressure, precipitation
-HOURLY_FILE = PROCESSED_DIR / "parramatta_era5_hourly_2020.csv"
+HOURLY_FILE = PROCESSED_DIR / "sydney_era5_hourly_2020.csv"
+STATIC_FEATURES_FILE = PROCESSED_DIR / "suburb_static_features.csv"
 
-FEATURE_TABLE_FILE = PROCESSED_DIR / "parramatta_feature_table_night_cooling.csv"
+FEATURE_TABLE_FILE = PROCESSED_DIR / "sydney_3_suburbs_feature_table_night_cooling.csv"
 
-FEATURE_IMPORTANCE_FILE = TABLES_DIR / "feature_importance_night_cooling.csv"
-MODEL_PREDICTIONS_FILE = TABLES_DIR / "model_predictions_night_cooling.csv"
+FEATURE_IMPORTANCE_FILE = TABLES_DIR / "feature_importance_sydney_3_suburbs.csv"
+MODEL_PREDICTIONS_FILE = TABLES_DIR / "model_predictions_sydney_3_suburbs.csv"
 
-CONFUSION_MATRIX_FIG = FIGURES_DIR / "confusion_matrix_night_cooling.png"
-FEATURE_IMPORTANCE_FIG = FIGURES_DIR / "feature_importance_night_cooling.png"
+SUBURB_SUMMARY_FILE = TABLES_DIR / "suburb_summary_sydney_3_suburbs.csv"
+RISK_COUNTS_FILE = TABLES_DIR / "risk_category_counts_sydney_3_suburbs.csv"
+
+CONFUSION_MATRIX_FIG = FIGURES_DIR / "confusion_matrix_sydney_3_suburbs.png"
+FEATURE_IMPORTANCE_FIG = FIGURES_DIR / "feature_importance_sydney_3_suburbs.png"
 
 
 # =========================
-# 1. CHECK INPUT FILE
+# 1. CHECK INPUT FILES
 # =========================
 
 if not HOURLY_FILE.exists():
     raise FileNotFoundError(f"Missing required hourly file: {HOURLY_FILE}")
 
+if not STATIC_FEATURES_FILE.exists():
+    raise FileNotFoundError(f"Missing required static feature file: {STATIC_FEATURES_FILE}")
+
 
 # =========================
-# 2. LOAD HOURLY METEOSTAT DATA
+# 2. LOAD HOURLY ERA5 DATA
 # =========================
 
 df = pd.read_csv(HOURLY_FILE)
 
 print("Original hourly columns:")
-print(df.columns)
+print(df.columns.tolist())
 
 print("\nFirst 5 hourly rows:")
 print(df.head())
+
+required_cols = [
+    "datetime",
+    "suburb",
+    "temperature",
+]
+
+for col in required_cols:
+    if col not in df.columns:
+        raise ValueError(f"Missing required column in hourly file: {col}")
 
 
 # =========================
 # 3. BASIC CLEANING
 # =========================
 
-required_cols = ["datetime", "temperature"]
-
-for col in required_cols:
-    if col not in df.columns:
-        raise ValueError(f"Missing required column in hourly file: {col}")
-
 df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
 df["temperature"] = pd.to_numeric(df["temperature"], errors="coerce")
 
-# Keep everything consistent with Meteostat.
-# These columns should all come from the same hourly Meteostat file.
-meteostat_weather_cols = [
+weather_cols = [
+    "dewpoint",
     "humidity",
     "wind_speed",
     "air_pressure",
     "precipitation",
 ]
 
-for col in meteostat_weather_cols:
+for col in weather_cols:
     if col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     else:
-        print(f"Warning: optional Meteostat column missing: {col}")
+        print(f"Warning: optional weather column missing: {col}")
 
-df = df.dropna(subset=["datetime", "temperature"]).copy()
+df = df.dropna(subset=["datetime", "suburb", "temperature"]).copy()
 
-if "suburb" not in df.columns:
-    df["suburb"] = "Parramatta"
-
-if "station_id" not in df.columns:
-    df["station_id"] = "Unknown"
-
-if "station_name" not in df.columns:
-    df["station_name"] = "Unknown"
-
-# IMPORTANT:
-# The Meteostat hourly timestamps may be in UTC depending on the source.
-# This converts them to Sydney local time for night-time analysis.
-#
-# If your extracted file is already definitely Sydney local time, you can comment
-# this block out. But for night-time cooling, local time is usually safer.
-if df["datetime"].dt.tz is None:
-    df["datetime"] = (
-        df["datetime"]
-        .dt.tz_localize("UTC")
-        .dt.tz_convert("Australia/Sydney")
-        .dt.tz_localize(None)
-    )
-else:
-    df["datetime"] = (
-        df["datetime"]
-        .dt.tz_convert("Australia/Sydney")
-        .dt.tz_localize(None)
-    )
+# NOTE:
+# combine_era5_3_suburbs.py should already convert ERA5 UTC timestamps
+# into Sydney local time. Do not convert timezone again here.
 
 df["date"] = df["datetime"].dt.floor("D")
 df["hour"] = df["datetime"].dt.hour
 df["month"] = df["datetime"].dt.month
 df["is_summer"] = df["month"].isin([12, 1, 2]).astype(int)
 
-print("\nDatetime range after Sydney-time conversion:")
+print("\nDatetime range:")
 print(df["datetime"].min(), "to", df["datetime"].max())
+
+print("\nRows per suburb:")
+print(df["suburb"].value_counts())
 
 print("\nHour counts:")
 print(df["hour"].value_counts().sort_index())
@@ -135,12 +119,9 @@ print(df["hour"].value_counts().sort_index())
 # =========================
 
 # Night period = 6 pm to 6 am.
-#
 # Example:
 # 2020-01-01 18:00 to 2020-01-02 05:00
 # belongs to night_date = 2020-01-01.
-#
-# This avoids accidentally treating midnight as the start of the night.
 
 df["is_night"] = (df["hour"] >= 18) | (df["hour"] < 6)
 
@@ -159,52 +140,44 @@ if night_df.empty:
 print("\nNight-time row preview:")
 print(
     night_df[
-        ["datetime", "date", "hour", "night_date", "temperature"]
+        ["datetime", "suburb", "date", "hour", "night_date", "temperature"]
     ].head(15)
 )
 
 
 # =========================
-# 5. DAILY FEATURES FROM METEOSTAT
+# 5. DAILY FEATURES BY SUBURB
 # =========================
 
-daily = df.groupby("date").agg(
-    tmax=("temperature", "max"),
-    tmin=("temperature", "min"),
-    daily_temp_range=("temperature", lambda x: x.max() - x.min()),
-).reset_index()
+agg_dict = {
+    "tmax": ("temperature", "max"),
+    "tmin": ("temperature", "min"),
+    "daily_temp_range": ("temperature", lambda x: x.max() - x.min()),
+}
 
-# Daily mean humidity from Meteostat
+if "dewpoint" in df.columns:
+    agg_dict["dewpoint_mean"] = ("dewpoint", "mean")
+
 if "humidity" in df.columns:
-    humidity_daily = df.groupby("date")["humidity"].mean().reset_index()
-    humidity_daily = humidity_daily.rename(columns={"humidity": "humidity_mean"})
-    daily = daily.merge(humidity_daily, on="date", how="left")
+    agg_dict["humidity_mean"] = ("humidity", "mean")
 
-# Daily mean wind speed from Meteostat
 if "wind_speed" in df.columns:
-    wind_daily = df.groupby("date")["wind_speed"].mean().reset_index()
-    wind_daily = wind_daily.rename(columns={"wind_speed": "wind_speed_mean"})
-    daily = daily.merge(wind_daily, on="date", how="left")
+    agg_dict["wind_speed_mean"] = ("wind_speed", "mean")
 
-# Daily mean air pressure from Meteostat
 if "air_pressure" in df.columns:
-    pressure_daily = df.groupby("date")["air_pressure"].mean().reset_index()
-    pressure_daily = pressure_daily.rename(columns={"air_pressure": "air_pressure_mean"})
-    daily = daily.merge(pressure_daily, on="date", how="left")
+    agg_dict["air_pressure_mean"] = ("air_pressure", "mean")
 
-# Daily total precipitation from Meteostat
 if "precipitation" in df.columns:
-    precipitation_daily = df.groupby("date")["precipitation"].sum(min_count=1).reset_index()
-    precipitation_daily = precipitation_daily.rename(
-        columns={"precipitation": "precipitation_total"}
-    )
-    daily = daily.merge(precipitation_daily, on="date", how="left")
-else:
+    agg_dict["precipitation_total"] = ("precipitation", "sum")
+
+daily = df.groupby(["suburb", "date"]).agg(**agg_dict).reset_index()
+
+if "precipitation_total" not in daily.columns:
     daily["precipitation_total"] = 0
 
 daily["precipitation_total"] = daily["precipitation_total"].fillna(0)
 
-print("\nDaily Meteostat feature preview:")
+print("\nDaily ERA5 feature preview:")
 print(daily.head())
 
 
@@ -215,8 +188,6 @@ print(daily.head())
 def calculate_night_cooling(group):
     group = group.sort_values("datetime").copy()
 
-    # Start-of-night should be the first available reading at or after 18:00.
-    # This avoids choosing midnight or early morning as the "start".
     evening_rows = group[group["hour"] >= 18]
 
     if evening_rows.empty or len(group) < 4:
@@ -235,7 +206,6 @@ def calculate_night_cooling(group):
     night_start_time = evening_rows["datetime"].iloc[0]
     night_start_temp = evening_rows["temperature"].iloc[0]
 
-    # Only use temperatures after the actual start-of-night.
     after_start = group[group["datetime"] >= night_start_time].copy()
 
     if after_start.empty:
@@ -265,8 +235,6 @@ def calculate_night_cooling(group):
         night_end_time - night_start_time
     ).total_seconds() / 3600
 
-    # If the minimum occurs immediately at the start, cooling rate is 0.
-    # This can happen during warming nights or incomplete records.
     if night_hours_to_min <= 0:
         night_cooling_rate = 0.0
     else:
@@ -289,7 +257,7 @@ def calculate_night_cooling(group):
 
 night_features = (
     night_df
-    .groupby("night_date", group_keys=False)
+    .groupby(["suburb", "night_date"], group_keys=False)
     .apply(calculate_night_cooling, include_groups=False)
     .reset_index()
 )
@@ -310,6 +278,7 @@ print("\nNight cooling feature preview:")
 print(
     night_features[
         [
+            "suburb",
             "date",
             "night_start_time",
             "night_min_time",
@@ -329,11 +298,10 @@ print(
 
 df_model = daily.merge(
     night_features,
-    on="date",
+    on=["suburb", "date"],
     how="inner",
 )
 
-df_model["suburb"] = "Parramatta"
 df_model["month"] = df_model["date"].dt.month
 df_model["is_summer"] = df_model["month"].isin([12, 1, 2]).astype(int)
 
@@ -354,6 +322,7 @@ print(
     df_model[
         [
             "date",
+            "suburb",
             "tmax",
             "tmin",
             "night_start_temp",
@@ -366,10 +335,47 @@ print(
 
 
 # =========================
-# 8. CREATE HOT DAY FLAG
+# 8. MERGE STATIC SUBURB FEATURES
 # =========================
 
-# Hot day = top 30% hottest days by maximum temperature.
+static_features = pd.read_csv(STATIC_FEATURES_FILE)
+
+print("\nStatic feature columns:")
+print(static_features.columns.tolist())
+
+if "suburb" not in static_features.columns:
+    raise ValueError("Static feature file must contain a 'suburb' column.")
+
+static_features["suburb"] = static_features["suburb"].astype(str).str.strip().str.title()
+df_model["suburb"] = df_model["suburb"].astype(str).str.strip().str.title()
+
+df_model = df_model.merge(
+    static_features,
+    on="suburb",
+    how="left",
+)
+
+print("\nAfter static feature merge:")
+static_preview_cols = [
+    "suburb",
+    "distance_to_coast_km",
+    "distance_to_water_km",
+    "is_coastal",
+    "inland_category",
+    "tree_canopy_percent",
+    "tree_canopy_area_m2",
+]
+
+static_preview_cols = [col for col in static_preview_cols if col in df_model.columns]
+print(df_model[static_preview_cols].drop_duplicates().head(10))
+
+
+# =========================
+# 9. CREATE HOT DAY FLAG
+# =========================
+
+# Global hot-day threshold across the 3-suburb dataset.
+# This defines hot days relative to all suburb-days in the study set.
 hot_threshold = df_model["tmax"].quantile(0.70)
 
 df_model["hot_day"] = (df_model["tmax"] >= hot_threshold).astype(int)
@@ -382,7 +388,7 @@ print(df_model["hot_day"].value_counts())
 
 
 # =========================
-# 9. CREATE TARGET VARIABLE
+# 10. CREATE TARGET VARIABLE
 # =========================
 
 hot_days = df_model[df_model["hot_day"] == 1].copy()
@@ -393,9 +399,7 @@ if len(hot_days) < 10:
     )
 
 # Cooling failure = hot day where overnight cooling rate is in the bottom 25%
-# of hot-day cooling rates.
-#
-# Lower cooling rate = slower cooling = worse overnight cooling.
+# of hot-day cooling rates across the full 3-suburb dataset.
 cooling_failure_threshold = hot_days["night_cooling_rate"].quantile(0.25)
 
 df_model["cooling_failure"] = (
@@ -411,14 +415,8 @@ print(df_model["cooling_failure"].value_counts())
 
 
 # =========================
-# 10. RISK CATEGORIES
+# 11. RISK CATEGORIES
 # =========================
-
-# Based on the project target definition:
-# Top 50% fastest cooling       = Low risk
-# 25th to 50th percentile       = Moderate risk
-# Bottom 10th to 25th percentile = High risk
-# Bottom 10% slowest cooling    = Extreme risk
 
 p10 = hot_days["night_cooling_rate"].quantile(0.10)
 p25 = hot_days["night_cooling_rate"].quantile(0.25)
@@ -445,26 +443,38 @@ df_model["cooling_risk_category"] = df_model.apply(assign_risk_category, axis=1)
 print("\nCooling risk category counts:")
 print(df_model["cooling_risk_category"].value_counts())
 
+print("\nCooling risk category by suburb:")
+print(pd.crosstab(df_model["suburb"], df_model["cooling_risk_category"]))
+
 
 # =========================
-# 11. PREPARE FEATURE COLUMNS
+# 12. PREPARE FEATURE COLUMNS
 # =========================
 
-# IMPORTANT:
-# Do NOT include night_cooling_rate in the ML features because it directly defines the label.
-# Do NOT include hot_day because cooling_failure is only defined on hot days.
-# Do NOT include night_min_temp if you want to avoid strong leakage from the target calculation.
-#
-# We keep the feature set based on day conditions and Meteostat weather variables.
+# Do NOT include:
+# - night_cooling_rate
+# - night_start_temp
+# - night_min_temp
+# - hot_day
+# - cooling_failure
+# because they either define or leak the target.
 
 possible_features = [
     "tmax",
     "tmin",
     "daily_temp_range",
+    "dewpoint_mean",
     "humidity_mean",
     "wind_speed_mean",
     "air_pressure_mean",
     "precipitation_total",
+    "distance_to_coast_km",
+    "distance_to_water_km",
+    "is_coastal",
+    "tree_canopy_percent",
+    "tree_canopy_area_m2",
+    "suburb_area_inside_gsr_m2",
+    "cadastred_suburb_area_m2",
     "month",
     "is_summer",
 ]
@@ -476,16 +486,20 @@ for col in features:
 
     if df_model[col].isna().all():
         print(f"Warning: dropping feature because it is entirely missing: {col}")
-        features.remove(col)
     else:
         df_model[col] = df_model[col].fillna(df_model[col].median())
+
+features = [
+    col for col in features
+    if col in df_model.columns and not df_model[col].isna().all()
+]
 
 print("\nFeatures used for modelling:")
 print(features)
 
 
 # =========================
-# 12. SAVE CLEAN FEATURE TABLE
+# 13. SAVE CLEAN FEATURE TABLE
 # =========================
 
 feature_table_cols = [
@@ -506,16 +520,27 @@ feature_table_cols = [
     "cooling_risk_category",
 ]
 
-for col in [
+optional_save_cols = [
+    "dewpoint_mean",
     "humidity_mean",
     "wind_speed_mean",
     "air_pressure_mean",
     "precipitation_total",
-]:
+    "distance_to_coast_km",
+    "distance_to_water_km",
+    "is_coastal",
+    "inland_category",
+    "tree_canopy_percent",
+    "tree_canopy_area_m2",
+    "suburb_area_inside_gsr_m2",
+    "cadastred_suburb_area_m2",
+    "month",
+    "is_summer",
+]
+
+for col in optional_save_cols:
     if col in df_model.columns:
         feature_table_cols.append(col)
-
-feature_table_cols += ["month", "is_summer"]
 
 feature_table = df_model[feature_table_cols].copy()
 
@@ -526,7 +551,59 @@ print(FEATURE_TABLE_FILE)
 
 
 # =========================
-# 13. PREPARE ML DATA
+# 14. SAVE SUMMARY TABLES
+# =========================
+
+summary_agg = {
+    "mean_tmax": ("tmax", "mean"),
+    "mean_tmin": ("tmin", "mean"),
+    "mean_night_cooling_rate": ("night_cooling_rate", "mean"),
+    "hot_days": ("hot_day", "sum"),
+    "cooling_failure_days": ("cooling_failure", "sum"),
+}
+
+for col in [
+    "distance_to_coast_km",
+    "distance_to_water_km",
+    "is_coastal",
+    "tree_canopy_percent",
+    "tree_canopy_area_m2",
+]:
+    if col in df_model.columns:
+        summary_agg[col] = (col, "first")
+
+if "inland_category" in df_model.columns:
+    summary_agg["inland_category"] = ("inland_category", "first")
+
+suburb_summary = df_model.groupby("suburb").agg(**summary_agg).reset_index()
+
+suburb_summary["total_days"] = df_model.groupby("suburb").size().values
+suburb_summary["cooling_failure_rate_all_days"] = (
+    suburb_summary["cooling_failure_days"] / suburb_summary["total_days"]
+)
+
+suburb_summary["cooling_failure_rate_hot_days"] = (
+    suburb_summary["cooling_failure_days"] / suburb_summary["hot_days"]
+)
+
+suburb_summary.to_csv(SUBURB_SUMMARY_FILE, index=False)
+
+risk_counts = pd.crosstab(
+    df_model["suburb"],
+    df_model["cooling_risk_category"]
+).reset_index()
+
+risk_counts.to_csv(RISK_COUNTS_FILE, index=False)
+
+print("\nSaved suburb summary:")
+print(SUBURB_SUMMARY_FILE)
+
+print("\nSaved risk category counts:")
+print(RISK_COUNTS_FILE)
+
+
+# =========================
+# 15. PREPARE ML DATA
 # =========================
 
 X = df_model[features]
@@ -540,7 +617,7 @@ if y.nunique() < 2:
 
 
 # =========================
-# 14. TRAIN / TEST SPLIT
+# 16. TRAIN / TEST SPLIT
 # =========================
 
 X_train, X_test, y_train, y_test = train_test_split(
@@ -553,7 +630,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 
 # =========================
-# 15. BASELINE MODEL: LOGISTIC REGRESSION
+# 17. BASELINE MODEL: LOGISTIC REGRESSION
 # =========================
 
 log_model = LogisticRegression(
@@ -572,7 +649,7 @@ print(classification_report(y_test, log_pred, zero_division=0))
 
 
 # =========================
-# 16. MAIN MODEL: RANDOM FOREST
+# 18. MAIN MODEL: RANDOM FOREST
 # =========================
 
 rf_model = RandomForestClassifier(
@@ -594,7 +671,7 @@ print(classification_report(y_test, rf_pred, zero_division=0))
 
 
 # =========================
-# 17. CONFUSION MATRIX
+# 19. CONFUSION MATRIX
 # =========================
 
 cm = confusion_matrix(y_test, rf_pred)
@@ -605,7 +682,7 @@ disp = ConfusionMatrixDisplay(
 )
 
 disp.plot()
-plt.title("Random Forest Confusion Matrix")
+plt.title("Random Forest Confusion Matrix - 3 Suburbs")
 plt.tight_layout()
 plt.savefig(CONFUSION_MATRIX_FIG)
 plt.close()
@@ -615,7 +692,7 @@ print(CONFUSION_MATRIX_FIG)
 
 
 # =========================
-# 18. FEATURE IMPORTANCE
+# 20. FEATURE IMPORTANCE
 # =========================
 
 importance = pd.DataFrame(
@@ -636,7 +713,7 @@ plt.figure(figsize=(8, 5))
 plt.barh(importance["feature"], importance["importance"])
 plt.xlabel("Importance")
 plt.ylabel("Feature")
-plt.title("Random Forest Feature Importance")
+plt.title("Random Forest Feature Importance - 3 Suburbs")
 plt.gca().invert_yaxis()
 plt.tight_layout()
 plt.savefig(FEATURE_IMPORTANCE_FIG)
@@ -648,11 +725,16 @@ print(FEATURE_IMPORTANCE_FIG)
 
 
 # =========================
-# 19. SAVE MODEL OUTPUTS
+# 21. SAVE MODEL OUTPUTS
 # =========================
 
-results = X_test.copy()
-results["actual"] = y_test.values
+results = df_model.loc[X_test.index, ["date", "suburb", "cooling_risk_category"]].copy()
+results = results.reset_index(drop=True)
+
+X_test_reset = X_test.reset_index(drop=True)
+results = pd.concat([results, X_test_reset], axis=1)
+
+results["actual"] = y_test.reset_index(drop=True)
 results["predicted"] = rf_pred
 results["prob_cooling_failure"] = rf_model.predict_proba(X_test)[:, 1]
 
@@ -663,14 +745,17 @@ print(MODEL_PREDICTIONS_FILE)
 
 
 # =========================
-# 20. FINAL SUMMARY
+# 22. FINAL SUMMARY
 # =========================
 
 print("\n==============================")
-print("MVP PIPELINE WITH METEOSTAT NIGHT-TIME COOLING RATE COMPLETE")
+print("3-SUBURB NIGHT-TIME COOLING FAILURE MVP COMPLETE")
 print("==============================")
-print("Files created:")
+
+print("\nFiles created:")
 print(f"- {FEATURE_TABLE_FILE}")
+print(f"- {SUBURB_SUMMARY_FILE}")
+print(f"- {RISK_COUNTS_FILE}")
 print(f"- {FEATURE_IMPORTANCE_FILE}")
 print(f"- {MODEL_PREDICTIONS_FILE}")
 print(f"- {CONFUSION_MATRIX_FIG}")
@@ -679,7 +764,7 @@ print(f"- {FEATURE_IMPORTANCE_FIG}")
 print("\nTarget definition:")
 print(
     "Cooling failure = hot day where overnight cooling rate is in the "
-    "bottom 25% of hot-day cooling rates."
+    "bottom 25% of hot-day cooling rates across the 3-suburb dataset."
 )
 
 print("\nNight-time cooling-rate formula:")
@@ -690,8 +775,14 @@ print(
 
 print("\nWeather source:")
 print(
-    "Temperature, humidity, wind speed, air pressure and precipitation are all "
-    "taken from the same Meteostat hourly file."
+    "Temperature, dewpoint, humidity, wind speed, air pressure and precipitation "
+    "are taken from ERA5 hourly time-series files."
+)
+
+print("\nStatic suburb features:")
+print(
+    "distance_to_coast_km, distance_to_water_km, is_coastal and optional tree "
+    "canopy fields are merged from data_processed/suburb_static_features.csv."
 )
 
 print("\nFeatures used:")
