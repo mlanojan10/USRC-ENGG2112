@@ -18,4 +18,4 @@ Cooling failure is defined as:
 cooling_failure = 1 if:
     day is a hot day
     AND
-    overnight cooling rate is in the bottom 25% of hot-day cooling rate
+    overnight cooling rate is in the bottom 25% of hot-day cooling rates

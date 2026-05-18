@@ -1,0 +1,13 @@
+suburb,distance_to_coast_km,distance_to_water_km,is_coastal,inland_category
+Bondi,0.5,0.5,1,coastal
+Manly,0.5,0.5,1,coastal
+Coogee,0.5,0.5,1,coastal
+Cronulla,0.5,0.5,1,coastal
+Parramatta,20.0,1.0,0,middle_inland
+Ryde,13.0,2.0,0,middle_inland
+Bankstown,18.0,5.0,0,middle_inland
+Fairfield,27.0,4.0,0,middle_inland
+Penrith,55.0,3.0,0,far_inland
+Blacktown,35.0,6.0,0,far_inland
+Liverpool,30.0,2.0,0,far_inland
+Campbelltown,40.0,10.0,0,far_inland

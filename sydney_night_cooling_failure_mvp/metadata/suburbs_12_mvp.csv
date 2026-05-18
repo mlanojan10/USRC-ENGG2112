@@ -1,0 +1,13 @@
+suburb,suburb_lat,suburb_lon,inland_category,is_coastal,distance_to_coast_km,distance_to_water_km,era5_filename
+Bondi,-33.891,151.276,coastal,1,0.5,0.5,bondi_era5_hourly_2020.nc
+Manly,-33.797,151.287,coastal,1,0.5,0.5,manly_era5_hourly_2020.nc
+Coogee,-33.920,151.255,coastal,1,0.5,0.5,coogee_era5_hourly_2020.nc
+Cronulla,-34.055,151.152,coastal,1,0.5,0.5,cronulla_era5_hourly_2020.nc
+Parramatta,-33.815,151.003,middle_inland,0,20.0,1.0,parramatta_era5_hourly_2020.nc
+Ryde,-33.815,151.106,middle_inland,0,13.0,2.0,ryde_era5_hourly_2020.nc
+Bankstown,-33.917,151.034,middle_inland,0,18.0,5.0,bankstown_era5_hourly_2020.nc
+Fairfield,-33.870,150.956,middle_inland,0,27.0,4.0,fairfield_era5_hourly_2020.nc
+Penrith,-33.751,150.694,far_inland,0,55.0,3.0,penrith_era5_hourly_2020.nc
+Blacktown,-33.770,150.909,far_inland,0,35.0,6.0,blacktown_era5_hourly_2020.nc
+Liverpool,-33.920,150.925,far_inland,0,30.0,2.0,liverpool_era5_hourly_2020.nc
+Campbelltown,-34.067,150.814,far_inland,0,40.0,10.0,campbelltown_era5_hourly_2020.nc
