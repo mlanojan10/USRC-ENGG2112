@@ -1076,6 +1076,10 @@ suburb_summary["cooling_failure_rate_all_days"] = (
     suburb_summary["cooling_failures"] / suburb_summary["days"]
 )
 
+suburb_summary["cooling_failure_rate_hot_days"] = (
+    suburb_summary["cooling_failures"] / suburb_summary["hot_days"]
+)
+
 suburb_summary.to_csv(SUBURB_SUMMARY_FILE, index=False)
 
 print("\n==============================")
@@ -1088,6 +1092,7 @@ display_cols = [
     "hot_days",
     "cooling_failures",
     "cooling_failure_rate_all_days",
+    "cooling_failure_rate_hot_days",
     "mean_tmax",
     "mean_night_cooling_rate",
     "median_night_cooling_rate",
@@ -1100,6 +1105,11 @@ suburb_display = suburb_summary[display_cols].copy()
 if "cooling_failure_rate_all_days" in suburb_display.columns:
     suburb_display["cooling_failure_rate_all_days"] = (
         suburb_display["cooling_failure_rate_all_days"] * 100
+    ).round(1)
+
+if "cooling_failure_rate_hot_days" in suburb_display.columns:
+    suburb_display["cooling_failure_rate_hot_days"] = (
+        suburb_display["cooling_failure_rate_hot_days"] * 100
     ).round(1)
 
 for col in ["mean_tmax", "mean_night_cooling_rate", "median_night_cooling_rate"]:
@@ -1117,7 +1127,6 @@ print(
     "\nPlain English: This table shows how often each suburb experienced slow overnight cooling. "
     "cooling_failures is the number of suburb-days labelled as poor overnight cooling. "
     "cooling_failure_rate_all_days is the percentage of all days in that suburb that were cooling failures. "
-    "Hot days are shown only as context and are not used to define the cooling-failure target. "
     "Be careful comparing suburbs directly because some suburbs share the same ERA5 weather grid cell."
 )
 

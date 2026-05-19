@@ -759,23 +759,6 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y,
 )
 
-print("\n==============================")
-print("TRAIN / VALIDATION / TEST SPLIT")
-print("==============================")
-print(f"Total model rows: {len(df_model)}")
-print(f"Training rows: {len(X_train)} ({len(X_train) / len(df_model):.1%})")
-print(f"Testing rows: {len(X_test)} ({len(X_test) / len(df_model):.1%})")
-print("Validation method: 5-fold cross-validation performed on the training set")
-print("\nTraining target balance:")
-print(y_train.value_counts().rename(index={0: "No cooling failure", 1: "Cooling failure"}))
-print("\nTesting target balance:")
-print(y_test.value_counts().rename(index={0: "No cooling failure", 1: "Cooling failure"}))
-print(
-    "\nPlain English: The model learns patterns from the training set. "
-    "The test set is held back until the end to check how well the model works on unseen data. "
-    "Validation is done using 5-fold cross-validation on the training set."
-)
-
 
 # =========================
 # 16. BASELINE MODEL: LOGISTIC REGRESSION
@@ -1076,50 +1059,11 @@ suburb_summary["cooling_failure_rate_all_days"] = (
     suburb_summary["cooling_failures"] / suburb_summary["days"]
 )
 
+suburb_summary["cooling_failure_rate_hot_days"] = (
+    suburb_summary["cooling_failures"] / suburb_summary["hot_days"]
+)
+
 suburb_summary.to_csv(SUBURB_SUMMARY_FILE, index=False)
-
-print("\n==============================")
-print("SUBURB-LEVEL NIGHT-TIME COOLING RISK SUMMARY")
-print("==============================")
-
-display_cols = [
-    "suburb",
-    "days",
-    "hot_days",
-    "cooling_failures",
-    "cooling_failure_rate_all_days",
-    "mean_tmax",
-    "mean_night_cooling_rate",
-    "median_night_cooling_rate",
-]
-
-display_cols = [col for col in display_cols if col in suburb_summary.columns]
-
-suburb_display = suburb_summary[display_cols].copy()
-
-if "cooling_failure_rate_all_days" in suburb_display.columns:
-    suburb_display["cooling_failure_rate_all_days"] = (
-        suburb_display["cooling_failure_rate_all_days"] * 100
-    ).round(1)
-
-for col in ["mean_tmax", "mean_night_cooling_rate", "median_night_cooling_rate"]:
-    if col in suburb_display.columns:
-        suburb_display[col] = suburb_display[col].round(3)
-
-suburb_display = suburb_display.sort_values(
-    by="cooling_failures",
-    ascending=False,
-)
-
-print(suburb_display.to_string(index=False))
-
-print(
-    "\nPlain English: This table shows how often each suburb experienced slow overnight cooling. "
-    "cooling_failures is the number of suburb-days labelled as poor overnight cooling. "
-    "cooling_failure_rate_all_days is the percentage of all days in that suburb that were cooling failures. "
-    "Hot days are shown only as context and are not used to define the cooling-failure target. "
-    "Be careful comparing suburbs directly because some suburbs share the same ERA5 weather grid cell."
-)
 
 print("\nSaved suburb summary:")
 print(SUBURB_SUMMARY_FILE)
@@ -1140,8 +1084,6 @@ print(f"- {MODEL_PREDICTIONS_FILE}")
 print(f"- {SUBURB_SUMMARY_FILE}")
 print(f"- {RISK_CATEGORY_COUNTS_FILE}")
 print(f"- {CROSS_VALIDATION_FILE}")
-print(f"- {FINAL_METRICS_FILE}")
-print(f"- {TABLES_DIR / 'duplicate_era5_weather_groups.csv'}")
 print(f"- {CONFUSION_MATRIX_FIG}")
 print(f"- {FEATURE_IMPORTANCE_FIG}")
 

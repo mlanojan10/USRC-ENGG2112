@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import make_pipeline
@@ -35,7 +35,6 @@ MODEL_PREDICTIONS_FILE = TABLES_DIR / "model_predictions_sydney_12_suburbs.csv"
 SUBURB_SUMMARY_FILE = TABLES_DIR / "suburb_summary_sydney_12_suburbs.csv"
 RISK_CATEGORY_COUNTS_FILE = TABLES_DIR / "risk_category_counts_sydney_12_suburbs.csv"
 CROSS_VALIDATION_FILE = TABLES_DIR / "cross_validation_scores_sydney_12_suburbs.csv"
-FINAL_METRICS_FILE = TABLES_DIR / "final_model_metrics_summary.csv"
 
 CONFUSION_MATRIX_FIG = FIGURES_DIR / "confusion_matrix_sydney_12_suburbs.png"
 FEATURE_IMPORTANCE_FIG = FIGURES_DIR / "feature_importance_sydney_12_suburbs.png"
@@ -759,23 +758,6 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y,
 )
 
-print("\n==============================")
-print("TRAIN / VALIDATION / TEST SPLIT")
-print("==============================")
-print(f"Total model rows: {len(df_model)}")
-print(f"Training rows: {len(X_train)} ({len(X_train) / len(df_model):.1%})")
-print(f"Testing rows: {len(X_test)} ({len(X_test) / len(df_model):.1%})")
-print("Validation method: 5-fold cross-validation performed on the training set")
-print("\nTraining target balance:")
-print(y_train.value_counts().rename(index={0: "No cooling failure", 1: "Cooling failure"}))
-print("\nTesting target balance:")
-print(y_test.value_counts().rename(index={0: "No cooling failure", 1: "Cooling failure"}))
-print(
-    "\nPlain English: The model learns patterns from the training set. "
-    "The test set is held back until the end to check how well the model works on unseen data. "
-    "Validation is done using 5-fold cross-validation on the training set."
-)
-
 
 # =========================
 # 16. BASELINE MODEL: LOGISTIC REGRESSION
@@ -898,46 +880,6 @@ print(
     "a cooling-failure warning was actually correct. For this project, recall is especially important "
     "because missing a risky slow-cooling night is worse than giving some false alarms."
 )
-
-# Save compact final metrics for reporting.
-rf_prob = rf_model.predict_proba(X_test)[:, 1]
-
-final_metrics = pd.DataFrame(
-    [
-        {
-            "model": "Logistic Regression baseline",
-            "accuracy": accuracy_score(y_test, log_pred),
-            "cooling_failure_precision": precision_score(y_test, log_pred, zero_division=0),
-            "cooling_failure_recall": recall_score(y_test, log_pred, zero_division=0),
-            "cooling_failure_f1": f1_score(y_test, log_pred, zero_division=0),
-            "roc_auc": None,
-        },
-        {
-            "model": "Random Forest final",
-            "accuracy": accuracy_score(y_test, rf_pred),
-            "cooling_failure_precision": precision_score(y_test, rf_pred, zero_division=0),
-            "cooling_failure_recall": recall_score(y_test, rf_pred, zero_division=0),
-            "cooling_failure_f1": f1_score(y_test, rf_pred, zero_division=0),
-            "roc_auc": roc_auc_score(y_test, rf_prob),
-        },
-        {
-            "model": "Random Forest 5-fold CV mean",
-            "accuracy": cv_table["accuracy"].mean(),
-            "cooling_failure_precision": cv_table["precision"].mean(),
-            "cooling_failure_recall": cv_table["recall"].mean(),
-            "cooling_failure_f1": cv_table["f1"].mean(),
-            "roc_auc": cv_table["roc_auc"].mean(),
-        },
-    ]
-)
-
-final_metrics.to_csv(FINAL_METRICS_FILE, index=False)
-
-print("\nCompact final metrics summary:")
-print(final_metrics)
-print("\nSaved final metrics summary:")
-print(FINAL_METRICS_FILE)
-
 
 
 # =========================
@@ -1076,50 +1018,11 @@ suburb_summary["cooling_failure_rate_all_days"] = (
     suburb_summary["cooling_failures"] / suburb_summary["days"]
 )
 
+suburb_summary["cooling_failure_rate_hot_days"] = (
+    suburb_summary["cooling_failures"] / suburb_summary["hot_days"]
+)
+
 suburb_summary.to_csv(SUBURB_SUMMARY_FILE, index=False)
-
-print("\n==============================")
-print("SUBURB-LEVEL NIGHT-TIME COOLING RISK SUMMARY")
-print("==============================")
-
-display_cols = [
-    "suburb",
-    "days",
-    "hot_days",
-    "cooling_failures",
-    "cooling_failure_rate_all_days",
-    "mean_tmax",
-    "mean_night_cooling_rate",
-    "median_night_cooling_rate",
-]
-
-display_cols = [col for col in display_cols if col in suburb_summary.columns]
-
-suburb_display = suburb_summary[display_cols].copy()
-
-if "cooling_failure_rate_all_days" in suburb_display.columns:
-    suburb_display["cooling_failure_rate_all_days"] = (
-        suburb_display["cooling_failure_rate_all_days"] * 100
-    ).round(1)
-
-for col in ["mean_tmax", "mean_night_cooling_rate", "median_night_cooling_rate"]:
-    if col in suburb_display.columns:
-        suburb_display[col] = suburb_display[col].round(3)
-
-suburb_display = suburb_display.sort_values(
-    by="cooling_failures",
-    ascending=False,
-)
-
-print(suburb_display.to_string(index=False))
-
-print(
-    "\nPlain English: This table shows how often each suburb experienced slow overnight cooling. "
-    "cooling_failures is the number of suburb-days labelled as poor overnight cooling. "
-    "cooling_failure_rate_all_days is the percentage of all days in that suburb that were cooling failures. "
-    "Hot days are shown only as context and are not used to define the cooling-failure target. "
-    "Be careful comparing suburbs directly because some suburbs share the same ERA5 weather grid cell."
-)
 
 print("\nSaved suburb summary:")
 print(SUBURB_SUMMARY_FILE)
@@ -1140,8 +1043,6 @@ print(f"- {MODEL_PREDICTIONS_FILE}")
 print(f"- {SUBURB_SUMMARY_FILE}")
 print(f"- {RISK_CATEGORY_COUNTS_FILE}")
 print(f"- {CROSS_VALIDATION_FILE}")
-print(f"- {FINAL_METRICS_FILE}")
-print(f"- {TABLES_DIR / 'duplicate_era5_weather_groups.csv'}")
 print(f"- {CONFUSION_MATRIX_FIG}")
 print(f"- {FEATURE_IMPORTANCE_FIG}")
 
@@ -1172,8 +1073,8 @@ print("\nImportant modelling note:")
 print(
     "Raw size-based columns such as tree_canopy_area_m2, population_2020, area_km2, "
     "built_up_area_m2 and sa2_area_m2 are saved for reporting but are not used as model predictors. "
-    "The model uses normalised features such as tree_canopy_percent and population_density_people_per_km2. "
-    "built_up_area_percent is saved for reporting but excluded from modelling due to data-quality concerns."
+    "The model uses normalised features such as tree_canopy_percent, population_density_people_per_km2 "
+    "and built_up_area_percent."
 )
 
 print("\nFeatures used:")

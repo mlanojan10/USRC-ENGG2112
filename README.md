@@ -16,7 +16,7 @@ Each row in the final model table represents one suburb on one day.
 
 ## Target variable
 
-The target variable is cooling_failure.
+The target variable is `cooling_failure`.
 
 Cooling failure is defined as:
 
@@ -44,7 +44,7 @@ A hot day is still calculated using:
 
     hot_day = 1 if tmax >= 30°C
 
-However, hot_day is now used only as a context variable. It is not used to define the target variable.
+However, `hot_day` is now used only as a context variable. It is not used to define the target variable.
 
 This change was made because the main purpose of the model is to predict night-time cooling failure, not simply daytime heat.
 
@@ -56,14 +56,14 @@ Weather variables are taken from ERA5 hourly time-series data for 2020.
 
 Processed daily weather features include:
 
-- daily maximum temperature, tmax
-- daily minimum temperature, tmin
-- daily temperature range, daily_temp_range
-- mean dewpoint, dewpoint_mean
-- mean humidity, humidity_mean
-- mean wind speed, wind_speed_mean
-- mean air pressure, air_pressure_mean
-- total precipitation, precipitation_total
+- daily maximum temperature, `tmax`
+- mean dewpoint, `dewpoint_mean`
+- mean humidity, `humidity_mean`
+- mean wind speed, `wind_speed_mean`
+- mean air pressure, `air_pressure_mean`
+- total precipitation, `precipitation_total`
+
+The final model excludes `tmin` and `daily_temp_range` from the predictor set because they are closely related to the target calculation.
 
 ### Static suburb features
 
@@ -78,17 +78,14 @@ Modelled static features include:
 - coastal status
 - tree canopy percentage
 - population density
-- built-up area percentage
 
-Raw size-based columns such as population count, area, tree canopy area, and built-up area are saved for reporting but are not used as model predictors.
+`built_up_area_percent` is saved for reporting, but excluded from the final predictor set because some SA2 proxy values were inflated near 100%.
 
 ## Features used for modelling
 
-The final model uses:
+The final defensible model uses:
 
     tmax
-    tmin
-    daily_temp_range
     dewpoint_mean
     humidity_mean
     wind_speed_mean
@@ -99,12 +96,14 @@ The final model uses:
     is_coastal
     tree_canopy_percent
     population_density_people_per_km2
-    built_up_area_percent
     month
     is_summer
 
-The model does not use the following as predictors because they would cause target leakage:
+The model does not use the following as predictors because they could cause leakage or data-quality issues:
 
+    tmin
+    daily_temp_range
+    built_up_area_percent
     night_cooling_rate
     night_start_temp
     night_min_temp
@@ -140,7 +139,7 @@ Logistic Regression is used as a simple baseline model.
 
 It estimates the probability of cooling failure using a weighted combination of the input features. In simple terms, it acts like a basic scoring system that tries to separate normal-cooling nights from slow-cooling nights.
 
-The current Logistic Regression test results are:
+Current Logistic Regression test results:
 
     Accuracy: 0.83
     Cooling failure precision: 0.61
@@ -153,14 +152,14 @@ Random Forest is used as the main model because it can handle nonlinear relation
 
 It works by building many decision trees and combining their predictions. In simple terms, it is like asking many small decision-makers to vote on whether a suburb-day is likely to experience poor overnight cooling.
 
-The current Random Forest test results are:
+Current Random Forest test results after leakage-adjacent predictors were removed:
 
-    Accuracy: 0.89
-    Cooling failure precision: 0.72
-    Cooling failure recall: 0.89
-    Cooling failure F1-score: 0.79
+    Accuracy: 0.85
+    Cooling failure precision: 0.66
+    Cooling failure recall: 0.82
+    Cooling failure F1-score: 0.73
 
-The Random Forest model performs better than Logistic Regression overall, especially in balancing detection of cooling-failure nights with fewer false alarms.
+The Random Forest model performs better than Logistic Regression overall, while also being more defensible after removing target-like predictors.
 
 ## Cross-validation results
 
@@ -168,11 +167,11 @@ A 5-fold stratified cross-validation step is used on the training set to check w
 
 Current mean cross-validation results:
 
-    Mean accuracy: 0.878
-    Mean precision: 0.709
-    Mean recall: 0.877
-    Mean F1-score: 0.783
-    Mean ROC-AUC: 0.944
+    Mean accuracy: 0.840
+    Mean precision: 0.638
+    Mean recall: 0.847
+    Mean F1-score: 0.726
+    Mean ROC-AUC: 0.924
 
 This suggests the model performance is reasonably consistent across different training splits, rather than being caused by one lucky train/test split.
 
@@ -180,10 +179,10 @@ This suggests the model performance is reasonably consistent across different tr
 
 The current Random Forest confusion matrix can be interpreted as:
 
-    Correctly predicted normal-cooling nights: 875
-    False alarms: 114
-    Missed cooling-failure nights: 37
-    Correctly detected cooling-failure nights: 292
+    Correctly predicted normal-cooling nights: 848
+    False alarms: 141
+    Missed cooling-failure nights: 59
+    Correctly detected cooling-failure nights: 270
 
 This means the model detected most slow-cooling nights.
 
@@ -191,19 +190,61 @@ For a heat-risk warning application, recall is especially important because miss
 
 ## Feature importance
 
-The most important Random Forest features in the current run are:
+The most important Random Forest features in the current defensible model are:
 
-    daily_temp_range
-    distance_to_water_km
-    precipitation_total
     distance_to_coast_km
+    precipitation_total
+    distance_to_water_km
     is_coastal
-    wind_speed_mean
     humidity_mean
+    wind_speed_mean
+    tmax
+    tree_canopy_percent
 
 This suggests that poor overnight cooling is influenced by both short-term weather conditions and geographic location.
 
 Feature importance does not prove direct causation, but it helps explain which variables were most useful for prediction.
+
+## Data quality warnings and limitations
+
+### Leakage-adjacent predictors removed
+
+`tmin` and `daily_temp_range` were removed from the final predictor set.
+
+This was done because:
+
+- `tmin` is closely related to the overnight minimum temperature used in the target calculation.
+- `daily_temp_range = tmax - tmin`, so it indirectly encodes `tmin`.
+- Keeping these variables allowed the model to learn target-like temperature shortcuts.
+
+After these changes, model performance decreased slightly, but the result is more defensible.
+
+### Built-up area removed from predictors
+
+`built_up_area_percent` was removed from the final predictor set because some suburbs had values close to or equal to 100%, likely due to SA2 proxy limitations.
+
+The variable is still saved for reporting, but it is treated as a broad urban development proxy rather than literal building footprint coverage.
+
+### ERA5 grid-cell limitation
+
+Some suburbs share identical ERA5 weather time series because ERA5 is gridded and relatively coarse compared with suburb boundaries.
+
+Detected shared ERA5 groups:
+
+    Bondi, Coogee, Cronulla
+    Bankstown, Liverpool
+    Blacktown, Fairfield, Parramatta, Ryde
+
+This means suburb-level risk rankings should be interpreted cautiously.
+
+### Bankstown population correction
+
+The raw population-density file originally contained an incorrect Bankstown proxy match to Banksmeadow.
+
+The corrected final static feature table uses:
+
+    Bankstown - North
+    population density around 6471.6 people/km²
 
 ## Current outputs
 
@@ -216,32 +257,20 @@ The script creates:
     outputs/tables/suburb_summary_sydney_12_suburbs.csv
     outputs/tables/risk_category_counts_sydney_12_suburbs.csv
     outputs/tables/cross_validation_scores_sydney_12_suburbs.csv
+    outputs/tables/final_model_metrics_summary.csv
+    outputs/tables/duplicate_era5_weather_groups.csv
 
     outputs/figures/confusion_matrix_sydney_12_suburbs.png
     outputs/figures/feature_importance_sydney_12_suburbs.png
 
-## Current interpretation
+## Final interpretation
 
 The current MVP predicts night-time cooling failure across 12 Sydney suburbs using daily weather and static suburb-level features.
 
 The final target is based directly on overnight cooling rate, which better matches the project aim than the earlier hot-day-based target.
 
-The Random Forest model performs better than the Logistic Regression baseline and achieves strong recall for cooling-failure nights. This means the model is reasonably effective at identifying suburb-days where overnight cooling is poor.
+After removing leakage-adjacent predictors, the Random Forest model achieved 0.85 accuracy and detected 82% of cooling-failure nights. Although performance decreased compared with the earlier model, the revised model is more defensible because it excludes variables closely related to the target calculation.
 
-The main predictors suggest that cooling failure is associated with daily temperature range, water/coastal proximity, precipitation, wind, humidity, and urban/geographic factors.
-
-## Key limitations
-
-- The model currently uses only one year of ERA5 data: 2020.
-- ERA5 is gridded weather data, so it may not fully capture suburb-level microclimates.
-- Static suburb features do not vary over time.
-- The target is based on relative cooling rate, not direct health outcome data.
-- Slow cooling does not always mean dangerously high night-time temperature; it is a proxy for overnight heat retention.
-- More years of data would improve generalisation.
-- Future work could include observed weather station data, additional years, land surface temperature, NDVI, roof colour, or health/emergency response data.
-
-## Final modelling note
+The main predictors suggest that cooling failure is associated with coastal distance, water proximity, precipitation, coastal status, humidity, wind, maximum daytime temperature and tree canopy.
 
 The current model should be described as a night-time cooling failure classifier, not a general heatwave model.
-
-It predicts whether a suburb-day is likely to experience poor overnight cooling based on weather, geographic, and urban-form conditions.
